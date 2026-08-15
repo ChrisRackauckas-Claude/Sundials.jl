@@ -20,6 +20,10 @@ Concrete subtypes, such as [`CVODE_BDF`](@ref), [`CVODE_Adams`](@ref), and
 This type is part of the SciML common solve interface. Downstream extensions should dispatch
 on concrete algorithm types when they need solver-specific options, and on
 `SundialsODEAlgorithm` only for behavior shared by all Sundials ODE algorithms.
+The generic Sundials methods use the type parameters for `method_choice` and
+`linear_solver`, and read the `max_order` field for `SciMLBase.alg_order`.
+Concrete ODE algorithms must therefore provide that field and the two type
+parameters; they may add solver-specific fields and methods.
 
 # Examples
 ```julia
@@ -45,6 +49,10 @@ Concrete subtypes, such as [`IDA`](@ref), are algorithm objects passed to `solve
 This type is part of the SciML common solve interface. Downstream extensions should dispatch
 on concrete algorithm types when they need solver-specific options, and on
 `SundialsDAEAlgorithm` only for behavior shared by all Sundials DAE algorithms.
+The generic Sundials methods use the type parameter for `linear_solver`, return
+`:Newton` from `method_choice`, and read the `max_order` field for
+`SciMLBase.alg_order`. Concrete DAE algorithms must provide that field and the
+type parameter; they may add solver-specific fields and methods.
 
 # Examples
 ```julia
@@ -54,6 +62,14 @@ alg isa SundialsDAEAlgorithm
 """
 abstract type SundialsDAEAlgorithm{LinearSolver} <: SciMLBase.AbstractDAEAlgorithm end
 
+"""
+    SundialsNonlinearSolveAlgorithm{LinearSolver}
+
+Developer-only implementation type for Sundials algorithms used by
+NonlinearSolve. It is intentionally not exported and is not part of the user
+solver API. Package developers extending KINSOL dispatch may use it together
+with the internal `linear_solver` helper.
+"""
 abstract type SundialsNonlinearSolveAlgorithm{LinearSolver} <:
 SciMLBase.AbstractNonlinearAlgorithm end
 
@@ -61,100 +77,67 @@ SciMLBase.alg_order(alg::Union{SundialsODEAlgorithm, SundialsDAEAlgorithm}) = al
 
 # ODE Algorithms
 """
-```julia
-CVODE_BDF(;method=:Newton,linear_solver=:Dense,
-          jac_upper=0,jac_lower=0,
-          stored_upper = jac_upper + jac_lower,
-          non_zero=0,krylov_dim=0,
-          stability_limit_detect=false,
-          max_hnil_warns = 10,
-          max_order = 5,
-          max_error_test_failures = 7,
-          max_nonlinear_iters = 3,
-          max_convergence_failures = 10,
-          prec = nothing, prec_side = 0)
-```
+    CVODE_BDF(; method = :Newton, linear_solver = :Dense, jac_upper = 0,
+        jac_lower = 0, non_zero = 0, krylov_dim = 0,
+        stability_limit_detect = false, max_hnil_warns = 10, max_order = 5,
+        max_error_test_failures = 7, max_nonlinear_iters = 3,
+        max_convergence_failures = 10, prec = nothing, psetup = nothing,
+        prec_side = 0)
 
-CVODE_BDF: CVode Backward Differentiation Formula (BDF) solver.
+CVODE_BDF is CVODE's implicit backward differentiation formula method for
+ordinary differential equations. Pass the resulting algorithm object to
+`solve` or `init`.
 
 # Keyword Arguments
 
-- `method`: nonlinear iteration method; `:Newton` is the default.
-- `linear_solver`: linear solver backend; `:Dense` is the default.
-- `jac_upper`, `jac_lower`: nonzero band counts required by `linear_solver = :Band`.
-- `prec`, `psetup`, `prec_side`: iterative linear-solver preconditioner hooks.
+- `method`: nonlinear iteration method, stored in the algorithm type. The
+  default is `:Newton`; `:Functional` is also supported.
+- `linear_solver`: linear solver backend. Supported choices include `:None`,
+  `:Diagonal`, `:Dense`, `:LapackDense`, `:Band`, `:LapackBand`, `:BCG`,
+  `:GMRES`, `:FGMRES`, `:PCG`, `:TFQMR`, and `:KLU`.
+- `jac_upper`, `jac_lower`: upper and lower half-bandwidths. Both must be
+  nonzero when `linear_solver = :Band`; they should also be set for
+  `:LapackBand`.
+- `non_zero`: accepted for compatibility with older Sundials.jl constructors;
+  it is not stored in the algorithm object.
+- `krylov_dim`: maximum Krylov subspace dimension for iterative linear solvers.
+- `stability_limit_detect`: whether CVODE should detect a BDF stability limit.
+- `max_hnil_warns`: maximum number of warnings for steps with negligible time
+  advance.
+- `max_order`: maximum BDF order.
+- `max_error_test_failures`: maximum error-test failures per step.
+- `max_nonlinear_iters`: maximum nonlinear iterations per step.
+- `max_convergence_failures`: maximum nonlinear convergence failures.
+- `prec`: preconditioner function for iterative linear solvers, or `nothing`.
+- `psetup`: optional preconditioner setup function, or `nothing`.
+- `prec_side`: preconditioning side passed to CVODE.
+
+# Fields
+
+The fields `jac_upper`, `jac_lower`, `krylov_dim`, `stability_limit_detect`,
+`max_hnil_warns`, `max_order`, `max_error_test_failures`,
+`max_nonlinear_iters`, `max_convergence_failures`, `prec`, `psetup`, and
+`prec_side` store the corresponding constructor options. `method` and
+`linear_solver` are type parameters and can be queried through the internal
+solver dispatch used by Sundials.
 
 # Returns
 
-A `CVODE_BDF` algorithm object for use with `SciMLBase.solve` on ODE problems.
+A `CVODE_BDF` algorithm object.
 
-## Method Choices
+# Throws
 
-* method - This is the method for solving the implicit equation. For BDF this defaults to
-    :Newton while for Adams this defaults to :Functional. These choices match the
-    recommended pairing in the Sundials.jl manual. However, note that using the :Newton
-    method may take less iterations but requires more memory than the :Function iteration
-    approach.
-* linear_solver - This is the linear solver which is used in the :Newton method.
+An error is thrown when an unsupported `linear_solver` is selected or when
+`:Band` is selected without both band-widths.
 
-## Linear Solver Choices
-
-The choices for the linear solver are:
-
-* :Dense - A dense linear solver.
-* :Band - A solver specialized for banded Jacobians. If used, you must set the position of the upper and lower non-zero diagonals via jac_upper and jac_lower.
-* :LapackDense - A version of the dense linear solver that uses the Julia-provided OpenBLAS-linked LAPACK for multithreaded operations. This will be faster than :Dense on larger systems but has noticeable overhead on smaller (<100 ODE) systems.
-* :LapackBand - A version of the banded linear solver that uses the Julia-provided OpenBLAS-linked LAPACK for multithreaded operations. This will be faster than :Band on larger systems but has noticeable overhead on smaller (<100 ODE) systems.
-* :Diagonal - This method is specialized for diagonal Jacobians.
-* :GMRES - A GMRES method. Recommended first choice Krylov method
-* :BCG - A Biconjugate gradient method.
-* :PCG - A preconditioned conjugate gradient method. Only for symmetric linear systems.
-* :TFQMR - A TFQMR method.
-* :KLU - A sparse factorization method. Requires that the user specifies a Jacobian. The Jacobian must be set as a sparse matrix in the ODEProblem type.
-
-## Examples
+# Examples
 
 ```julia
-CVODE_BDF() # BDF method using Newton + Dense solver
-CVODE_BDF(method=:Functional) # BDF method using Functional iterations
-CVODE_BDF(linear_solver=:Band,jac_upper=3,jac_lower=3) # Banded solver with nonzero diagonals 3 up and 3 down
-CVODE_BDF(linear_solver=:BCG) # Biconjugate gradient method
+prob = ODEProblem((du, u, p, t) -> (du[1] = -u[1]), [1.0], (0.0, 1.0))
+solve(prob, CVODE_BDF())
+CVODE_BDF(method = :Functional)
+CVODE_BDF(linear_solver = :Band, jac_upper = 3, jac_lower = 3)
 ```
-
-### Preconditioners
-
-Note that here `prec` is a preconditioner function
-`prec(z,r,p,t,y,fy,gamma,delta,lr)` where:
-
-- `z`: the computed output vector
-- `r`: the right-hand side vector of the linear system
-- `p`: the parameters
-- `t`: the current independent variable
-- `du`: the current value of `f(u,p,t)`
-- `gamma`: the `gamma` of `W = M - gamma*J`
-- `delta`: the iterative method tolerance
-- `lr`: a flag for whether `lr=1` (left) or `lr=2` (right)
-  preconditioning
-
-and `psetup` is the preconditioner setup function for pre-computing Jacobian
-information `psetup(p, t, u, du, jok, jcurPtr, gamma)`. Where:
-
-- `p`: the parameters
-- `t`: the current independent variable
-- `u`: the current state
-- `du`: the current `f(u,p,t)`
-- `jok`: a bool indicating whether the Jacobian needs to be updated
-- `jcurPtr`: a reference to an Int for whether the Jacobian was updated.
-  `jcurPtr[]=true` should be set if the Jacobian was updated, and
-  `jcurPtr[]=false` should be set if the Jacobian was not updated.
-- `gamma`: the `gamma` of `W = M - gamma*J`
-
-`psetup` is optional when `prec` is set.
-
-### Additional Options
-
-See [the CVODE manual](https://computing.llnl.gov/sites/default/files/cv_guide-5.7.0.pdf)
-for details on the additional options.
 """
 struct CVODE_BDF{Method, LinearSolver, P, PS} <: SundialsODEAlgorithm{Method, LinearSolver}
     jac_upper::Int
@@ -224,100 +207,54 @@ function CVODE_BDF(;
     )
 end
 """
-```julia
-CVODE_Adams(;method=:Functional,linear_solver=:None,
-            jac_upper=0,jac_lower=0,
-            stored_upper = jac_upper + jac_lower,
-            krylov_dim=0,
-            stability_limit_detect=false,
-            max_hnil_warns = 10,
-            max_order = 12,
-            max_error_test_failures = 7,
-            max_nonlinear_iters = 3,
-            max_convergence_failures = 10,
-            prec = nothing, psetup = nothing, prec_side = 0)
-```
+    CVODE_Adams(; method = :Functional, linear_solver = :None, jac_upper = 0,
+        jac_lower = 0, krylov_dim = 0, stability_limit_detect = false,
+        max_hnil_warns = 10, max_order = 12, max_error_test_failures = 7,
+        max_nonlinear_iters = 3, max_convergence_failures = 10,
+        prec = nothing, psetup = nothing, prec_side = 0)
 
-CVODE_Adams: CVode Adams-Moulton solver.
+CVODE_Adams is CVODE's Adams-Moulton method for ordinary differential
+equations. Pass the resulting algorithm object to `solve` or `init`.
 
 # Keyword Arguments
 
-- `method`: nonlinear iteration method; `:Functional` is the default.
-- `linear_solver`: linear solver backend; `:None` is the default.
-- `jac_upper`, `jac_lower`: nonzero band counts required by `linear_solver = :Band`.
+- `method`: nonlinear iteration method, stored in the algorithm type. The
+  default is `:Functional`; `:Newton` is also supported.
+- `linear_solver`: linear solver backend. The default is `:None`; the same
+  choices as [`CVODE_BDF`](@ref) are supported.
+- `jac_upper`, `jac_lower`: upper and lower half-bandwidths. Both must be
+  nonzero when `linear_solver = :Band`; they should also be set for
+  `:LapackBand`.
+- `krylov_dim`, `stability_limit_detect`, `max_hnil_warns`, `max_order`,
+  `max_error_test_failures`, `max_nonlinear_iters`, and
+  `max_convergence_failures`: corresponding CVODE iteration and order limits.
 - `prec`, `psetup`, `prec_side`: iterative linear-solver preconditioner hooks.
+
+# Fields
+
+The fields `jac_upper`, `jac_lower`, `krylov_dim`, `stability_limit_detect`,
+`max_hnil_warns`, `max_order`, `max_error_test_failures`,
+`max_nonlinear_iters`, `max_convergence_failures`, `prec`, `psetup`, and
+`prec_side` store the corresponding constructor options. `method` and
+`linear_solver` are type parameters.
 
 # Returns
 
-A `CVODE_Adams` algorithm object for use with `SciMLBase.solve` on ODE problems.
+A `CVODE_Adams` algorithm object.
 
-## Method Choices
+# Throws
 
-* method - This is the method for solving the implicit equation. For BDF this defaults to
-    :Newton while for Adams this defaults to :Functional. These choices match the
-    recommended pairing in the Sundials.jl manual. However, note that using the :Newton
-    method may take less iterations but requires more memory than the :Function iteration
-    approach.
-* linear_solver - This is the linear solver which is used in the :Newton method.
+An error is thrown when an unsupported `linear_solver` is selected or when
+`:Band` is selected without both band-widths.
 
-## Linear Solver Choices
-
-The choices for the linear solver are:
-
-* :Dense - A dense linear solver.
-* :Band - A solver specialized for banded Jacobians. If used, you must set the position of the upper and lower non-zero diagonals via jac_upper and jac_lower.
-* :LapackDense - A version of the dense linear solver that uses the Julia-provided OpenBLAS-linked LAPACK for multithreaded operations. This will be faster than :Dense on larger systems but has noticeable overhead on smaller (<100 ODE) systems.
-* :LapackBand - A version of the banded linear solver that uses the Julia-provided OpenBLAS-linked LAPACK for multithreaded operations. This will be faster than :Band on larger systems but has noticeable overhead on smaller (<100 ODE) systems.
-* :Diagonal - This method is specialized for diagonal Jacobians.
-* :GMRES - A GMRES method. Recommended first choice Krylov method
-* :BCG - A Biconjugate gradient method.
-* :PCG - A preconditioned conjugate gradient method. Only for symmetric linear systems.
-* :TFQMR - A TFQMR method.
-* :KLU - A sparse factorization method. Requires that the user specifies a Jacobian. The Jacobian must be set as a sparse matrix in the ODEProblem type.
-
-## Examples
+# Examples
 
 ```julia
-CVODE_Adams() # Adams method using Newton + Dense solver
-CVODE_Adams(method=:Functional) # Adams method using Functional iterations
-CVODE_Adams(linear_solver=:Band,jac_upper=3,jac_lower=3) # Banded solver with nonzero diagonals 3 up and 3 down
-CVODE_Adams(linear_solver=:BCG) # Biconjugate gradient method
+prob = ODEProblem((du, u, p, t) -> (du[1] = -u[1]), [1.0], (0.0, 1.0))
+solve(prob, CVODE_Adams())
+CVODE_Adams(method = :Newton, linear_solver = :Dense)
+CVODE_Adams(linear_solver = :Band, jac_upper = 3, jac_lower = 3)
 ```
-
-### Preconditioners
-
-Note that here `prec` is a preconditioner function
-`prec(z,r,p,t,y,fy,gamma,delta,lr)` where:
-
-- `z`: the computed output vector
-- `r`: the right-hand side vector of the linear system
-- `p`: the parameters
-- `t`: the current independent variable
-- `du`: the current value of `f(u,p,t)`
-- `gamma`: the `gamma` of `W = M - gamma*J`
-- `delta`: the iterative method tolerance
-- `lr`: a flag for whether `lr=1` (left) or `lr=2` (right)
-  preconditioning
-
-and `psetup` is the preconditioner setup function for pre-computing Jacobian
-information `psetup(p, t, u, du, jok, jcurPtr, gamma)`. Where:
-
-- `p`: the parameters
-- `t`: the current independent variable
-- `u`: the current state
-- `du`: the current `f(u,p,t)`
-- `jok`: a bool indicating whether the Jacobian needs to be updated
-- `jcurPtr`: a reference to an Int for whether the Jacobian was updated.
-  `jcurPtr[]=true` should be set if the Jacobian was updated, and
-  `jcurPtr[]=false` should be set if the Jacobian was not updated.
-- `gamma`: the `gamma` of `W = M - gamma*J`
-
-`psetup` is optional when `prec` is set.
-
-### Additional Options
-
-See [the CVODE manual](https://computing.llnl.gov/sites/default/files/cv_guide-5.7.0.pdf)
-for details on the additional options.
 """
 struct CVODE_Adams{Method, LinearSolver, P, PS} <:
     SundialsODEAlgorithm{Method, LinearSolver}
@@ -387,40 +324,65 @@ function CVODE_Adams(;
     )
 end
 """
-```julia
-ARKODE(stiffness=Sundials.Implicit();
-       method=:Newton,linear_solver=:Dense,
-       jac_upper=0,jac_lower=0,stored_upper = jac_upper+jac_lower,
-       non_zero=0,krylov_dim=0,
-       max_hnil_warns = 10,
-       max_error_test_failures = 7,
-       max_nonlinear_iters = 3,
-       max_convergence_failures = 10,
-       predictor_method = 0,
-       nonlinear_convergence_coefficient = 0.1,
-       dense_order = 3,
-       order = 4,
-       set_optimal_params = false,
-       crdown = 0.3,
-       dgmax = 0.2,
-       rdiv = 2.3,
-       msbp = 20,
-       adaptivity_method = 0,
-       prec = nothing, psetup = nothing, prec_side = 0)
-```
+    ARKODE(stiffness = Implicit(); method = :Newton, linear_solver = :Dense,
+        mass_linear_solver = :Dense, jac_upper = 0, jac_lower = 0,
+        mass_upper = 0, mass_lower = 0, non_zero = 0, krylov_dim = 0,
+        mass_krylov_dim = 0, max_hnil_warns = 10,
+        max_error_test_failures = 7, max_nonlinear_iters = 3,
+        max_convergence_failures = 10, predictor_method = 0,
+        nonlinear_convergence_coefficient = 0.1, dense_order = 3, order = 4,
+        set_optimal_params = false, crdown = 0.3, dgmax = 0.2, rdiv = 2.3,
+        msbp = 20, adaptivity_method = 0, itable = nothing, etable = nothing,
+        prec = nothing, psetup = nothing, prec_side = 0)
 
 ARKODE: Explicit and ESDIRK Runge-Kutta methods of orders 2-8 depending on choice of options.
 
+# Arguments
+
+- `stiffness`: selects the `Implicit()` or `Explicit()` ARK stepper.
+
 # Keyword Arguments
 
-- `stiffness`: selects `Implicit()` or `Explicit()` tableaux.
-- `method`, `linear_solver`, `mass_linear_solver`: nonlinear and linear solver choices.
-- `order`, `itable`, `etable`: select an ARK tableau and its order.
+- `method`: nonlinear iteration method for implicit problems.
+- `linear_solver`: linear solver for the ODE part.
+- `mass_linear_solver`: linear solver for a non-identity mass matrix.
+- `jac_upper`, `jac_lower`: Jacobian half-bandwidths for banded solvers.
+- `mass_upper`, `mass_lower`: mass-matrix half-bandwidths for banded solvers.
+- `non_zero`: accepted for compatibility with older constructors; it is not
+  stored in the algorithm object.
+- `krylov_dim`, `mass_krylov_dim`: Krylov dimensions for the ODE and mass
+  matrix linear solves.
+- `max_hnil_warns`, `max_error_test_failures`, `max_nonlinear_iters`, and
+  `max_convergence_failures`: iteration and error limits.
+- `predictor_method`, `nonlinear_convergence_coefficient`, `dense_order`,
+  `order`, `set_optimal_params`, `crdown`, `dgmax`, `rdiv`, `msbp`, and
+  `adaptivity_method`: ARKODE nonlinear, interpolation, and adaptivity
+  controls. `adaptivity_method` is accepted for compatibility but is not
+  stored in the algorithm object.
+- `itable`, `etable`: optional implicit and explicit ARK tableaux.
 - `prec`, `psetup`, `prec_side`: iterative linear-solver preconditioner hooks.
+
+# Fields
+
+The fields `stiffness`, `jac_upper`, `jac_lower`, `mass_upper`, `mass_lower`,
+`krylov_dim`, `mass_krylov_dim`, `max_hnil_warns`, `max_error_test_failures`,
+`max_nonlinear_iters`, `max_convergence_failures`, `predictor_method`,
+`nonlinear_convergence_coefficient`, `dense_order`, `order`,
+`set_optimal_params`, `crdown`, `dgmax`, `rdiv`, `msbp`, `itable`, `etable`,
+`prec`, `psetup`, and `prec_side` store the corresponding constructor
+options. `method`, `linear_solver`, and `mass_linear_solver` are type
+parameters.
 
 # Returns
 
 An `ARKODE` algorithm object for use with `SciMLBase.solve` on ODE problems.
+
+# Throws
+
+An error is thrown when an unsupported ODE or mass-matrix `linear_solver` is
+selected, or when `:Band` is selected without both band-widths.
+
+# Examples
 
 ## Tableau Choices
 
@@ -475,12 +437,8 @@ ARKODE(Sundials.Implicit(), itable = Sundials.KVAERNO_4_2_3)
 
 ## Method Choices
 
-* `method` - This is the method for solving the implicit equation. For BDF this defaults to
-    `:Newton` while for Adams this defaults to `:Functional`. These choices match the
-    recommended pairing in the Sundials.jl manual. However, note that using the `:Newton`
-    method may take less iterations but requires more memory than the `:Function` iteration
-    approach.
-* `linear_solver` - This is the linear solver which is used in the `:Newton` method.
+* `method` - The nonlinear iteration method for implicit ARKODE problems.
+* `linear_solver` - The linear solver used by implicit ARKODE problems.
 
 ## Linear Solver Choices
 
@@ -674,35 +632,53 @@ SciMLBase.alg_order(alg::ARKODE) = 5
 
 # DAE Algorithms
 """
-```julia
-IDA(;linear_solver=:Dense,jac_upper=0,jac_lower=0,krylov_dim=0,
-    max_order = 5,
-    max_error_test_failures = 7,
-    max_nonlinear_iters = 3,
-    nonlinear_convergence_coefficient = 0.33,
-    nonlinear_convergence_coefficient_ic = 0.0033,
-    max_num_steps_ic = 5,
-    max_num_jacs_ic = 4,
-    max_num_iters_ic = 10,
-    max_num_backs_ic = 100,
-    use_linesearch_ic = true,
-    max_convergence_failures = 10,
-    init_all = false,
-    prec = nothing, psetup = nothing)
-```
+    IDA(; linear_solver = :Dense, jac_upper = 0, jac_lower = 0,
+        krylov_dim = 0, max_order = 5, max_error_test_failures = 7,
+        max_nonlinear_iters = 3, nonlinear_convergence_coefficient = 0.33,
+        nonlinear_convergence_coefficient_ic = 0.0033, max_num_steps_ic = 5,
+        max_num_jacs_ic = 4, max_num_iters_ic = 10, max_num_backs_ic = 100,
+        use_linesearch_ic = true, init_all = false,
+        max_convergence_failures = 10, prec = nothing, psetup = nothing)
 
 IDA: This is the IDA method from the Sundials.jl package.
 
 # Keyword Arguments
 
 - `linear_solver`: linear solver backend; `:Dense` is the default.
-- `jac_upper`, `jac_lower`: nonzero band counts required by `linear_solver = :Band`.
-- `init_all`: chooses which initial values the IDA consistency routine may modify.
-- `prec`, `psetup`: iterative linear-solver preconditioner hooks.
+- `jac_upper`, `jac_lower`: upper and lower half-bandwidths for banded
+  solvers. Both must be nonzero when `linear_solver = :Band` or `:LapackBand`.
+- `krylov_dim`: maximum Krylov subspace dimension for iterative linear solvers.
+- `max_order`, `max_error_test_failures`, `max_nonlinear_iters`, and
+  `max_convergence_failures`: IDA order, error, and iteration limits.
+- `nonlinear_convergence_coefficient`: nonlinear convergence coefficient.
+- `nonlinear_convergence_coefficient_ic`: coefficient used by initial
+  condition consistency calculations.
+- `max_num_steps_ic`, `max_num_jacs_ic`, `max_num_iters_ic`, and
+  `max_num_backs_ic`: initial-condition calculation limits.
+- `use_linesearch_ic`: whether to use line search during initialization.
+- `init_all`: whether the consistency calculation may modify all initial values.
+- `prec`, `psetup`: left preconditioner and optional setup functions.
+
+# Fields
+
+The fields `jac_upper`, `jac_lower`, `krylov_dim`, `max_order`,
+`max_error_test_failures`, `nonlinear_convergence_coefficient`,
+`max_nonlinear_iters`, `max_convergence_failures`,
+`nonlinear_convergence_coefficient_ic`, `max_num_steps_ic`,
+`max_num_jacs_ic`, `max_num_iters_ic`, `max_num_backs_ic`,
+`use_linesearch_ic`, `init_all`, `prec`, and `psetup` store the corresponding
+constructor options. `linear_solver` is a type parameter.
 
 # Returns
 
 An `IDA` algorithm object for use with `SciMLBase.solve` on DAE problems.
+
+# Throws
+
+An error is thrown when an unsupported `linear_solver` is selected or when
+`:Band` is selected without both band-widths.
+
+# Examples
 
 ## Linear Solvers
 
@@ -847,20 +823,12 @@ function IDA(;
 end
 
 """
-KINSOL: Newton-Krylov technique solver.
+    KINSOL(; linear_solver = :Dense, jac_upper = 0, jac_lower = 0,
+        userdata = nothing, prec_side = 0, krylov_dim = 0,
+        globalization_strategy = :None, maxsetupcalls = 0)
 
-```julia
-KINSOL(;
-    linear_solver = :Dense,
-    jac_upper = 0,
-    jac_lower = 0,
-    userdata = nothing,
-    prec_side = 0,
-    krylov_dim = 0,
-    globalization_strategy = :None
-    maxsetupcalls=0
-)
-```
+KINSOL is Sundials' Newton-Krylov nonlinear solver for nonlinear and
+steady-state problems.
 
 # Keyword Arguments
 
@@ -872,10 +840,21 @@ KINSOL(;
 - `globalization_strategy`: either `:None` or `:LineSearch`.
 - `maxsetupcalls`: maximum nonlinear iterations between setup calls.
 
+# Fields
+
+The fields `jac_upper`, `jac_lower`, `userdata`, `prec_side`, `krylov_dim`,
+`globalization_strategy`, and `maxsetupcalls` store the corresponding
+constructor options. `linear_solver` is a type parameter.
+
 # Returns
 
 A `KINSOL` algorithm object for use with `SciMLBase.solve` on nonlinear and steady-state
 problems.
+
+# Throws
+
+An error is thrown when an unsupported `linear_solver` or
+`globalization_strategy` is selected.
 
 ## Linear Solver Choices
 
@@ -908,7 +887,7 @@ problems.
 - `maxsetupcalls`: Maximum number of nonlinear iterations that can be performed between
   calls to the preconditioner or Jacobian setup function.
 
-## Examples
+# Examples
 
 ```julia
 KINSOL(linear_solver = :GMRES, globalization_strategy = :LineSearch)

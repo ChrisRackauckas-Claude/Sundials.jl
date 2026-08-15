@@ -39,3 +39,19 @@ owned and documented by [SciMLBase](https://docs.sciml.ai/SciMLBase/stable/) and
   - `NullParameters`
 
 Anything else from SciMLBase must be imported from SciMLBase directly.
+
+## Reexported SciML interface types and helpers
+
+These names are reexported by Sundials for the same reason and remain owned and
+documented by [SciMLBase](https://docs.sciml.ai/SciMLBase/stable/):
+
+- [`DECallback`](https://docs.sciml.ai/SciMLBase/stable/interfaces/Callbacks/):
+  the common callback interface used by SciML integrators.
+- [`DEIntegrator`](https://docs.sciml.ai/SciMLBase/stable/interfaces/Integrator/):
+  the common differential-equation integrator interface.
+- [`DEStats`](https://docs.sciml.ai/SciMLBase/stable/basics/solutions/):
+  the standard container for differential-equation solver statistics.
+- [`addsteps!`](https://docs.sciml.ai/SciMLBase/stable/interfaces/Integrator/):
+  add accepted steps to an integrator's solution history.
+- [`last_step_failed`](https://docs.sciml.ai/SciMLBase/stable/interfaces/Integrator/):
+  query whether the most recent integrator step failed.
