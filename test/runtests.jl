@@ -71,6 +71,9 @@ end
 end
 
 @testset "Common Interface" begin
+    @safetestset "Algorithms" begin
+        include("common_interface/algorithms.jl")
+    end
     @safetestset "CVODE" begin
         include("common_interface/cvode.jl")
     end
