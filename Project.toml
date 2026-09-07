@@ -1,6 +1,6 @@
 name = "Sundials"
 uuid = "c3572dad-4567-51f8-b174-8c6c989267f4"
-version = "6.6.0"
+version = "6.7.0"
 authors = ["Chris Rackauckas <accounts@chrisrackauckas.com>"]
 
 [deps]
@@ -45,7 +45,7 @@ NonlinearSolveBase = "2"
 ODEProblemLibrary = "1"
 PrecompileTools = "1.2.1"
 SafeTestsets = "0.1"
-SciMLBase = "3.40"
+SciMLBase = "3.52"
 SciMLLogging = "2"
 SciMLOperators = "1"
 SparseArrays = "1"

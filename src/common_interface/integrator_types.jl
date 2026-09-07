@@ -80,6 +80,9 @@ function (integrator::CVODEIntegrator)(
         deriv::Type{Val{T}} = Val{0};
         idxs = nothing
     ) where {T}
+    if SciMLBase.has_symbolic_idxs(idxs)
+        return SciMLBase.symbolic_interpolation(integrator, t, idxs, deriv)
+    end
     out = similar(integrator.u)
     out_nvec = NVector(vec(out), integrator.ctx_handle.ctx)
     integrator.flag = @checkflag CVodeGetDky(integrator.mem, t, Cint(T), out_nvec) false integrator.opts.verbose
@@ -162,6 +165,9 @@ function (integrator::ARKODEIntegrator{
         N, pType, solType, algType, fType, UFType, JType, oType,
         LStype, Atype, MLStype, Mtype, CallbackCacheType, IA, T,
     }
+    if SciMLBase.has_symbolic_idxs(idxs)
+        return SciMLBase.symbolic_interpolation(integrator, t, idxs, deriv)
+    end
     out = similar(integrator.u)
     out_nvec = NVector(vec(out), integrator.ctx_handle.ctx)
     integrator.flag = @checkflag ARKStepGetDky(integrator.mem, t, Cint(T), out_nvec) false integrator.opts.verbose
@@ -180,6 +186,9 @@ function (integrator::ARKODEIntegrator{
         N, pType, solType, algType, fType, UFType, JType, oType,
         LStype, Atype, MLStype, Mtype, CallbackCacheType, IA, T,
     }
+    if SciMLBase.has_symbolic_idxs(idxs)
+        return SciMLBase.symbolic_interpolation(integrator, t, idxs, deriv)
+    end
     out = similar(integrator.u)
     out_nvec = NVector(vec(out), integrator.ctx_handle.ctx)
     integrator.flag = @checkflag ERKStepGetDky(integrator.mem, t, Cint(T), out_nvec) false integrator.opts.verbose
@@ -276,6 +285,9 @@ function (integrator::IDAIntegrator)(
         deriv::Type{Val{T}} = Val{0};
         idxs = nothing
     ) where {T}
+    if SciMLBase.has_symbolic_idxs(idxs)
+        return SciMLBase.symbolic_interpolation(integrator, t, idxs, deriv)
+    end
     out = similar(integrator.u)
     out_nvec = NVector(vec(out), integrator.ctx_handle.ctx)
     integrator.flag = @checkflag IDAGetDky(integrator.mem, t, Cint(T), out_nvec) false integrator.opts.verbose
