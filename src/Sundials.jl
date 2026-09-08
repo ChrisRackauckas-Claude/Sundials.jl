@@ -107,6 +107,22 @@ include("nvector_wrapper.jl")
 
 include("../lib/libsundials_api.jl")
 
+# `sunindextype` is Int64 in the Clang wrappers, while Julia `length`/`Int` are
+# Int32 on 32-bit hosts. Convert at the API boundary so call sites can pass
+# native sizes.
+SUNDenseMatrix(M::Integer, N::Integer, sunctx::SUNContext) =
+    SUNDenseMatrix(sunindextype(M), sunindextype(N), sunctx)
+SUNBandMatrix(N::Integer, mu::Integer, ml::Integer, sunctx::SUNContext) =
+    SUNBandMatrix(sunindextype(N), sunindextype(mu), sunindextype(ml), sunctx)
+function SUNSparseMatrix(M::Integer, N::Integer, NNZ::Integer, sparsetype, ctx::SUNContext)
+    return SUNSparseMatrix(
+        sunindextype(M), sunindextype(N), sunindextype(NNZ),
+        convert(Cint, sparsetype), ctx
+    )
+end
+N_VMake_Serial(vec_length::Integer, v_data, sunctx::SUNContext) =
+    N_VMake_Serial(sunindextype(vec_length), v_data, sunctx)
+
 for ff in names(@__MODULE__; all = true)
     fname = string(ff)
     if occursin("SetLinearSolver", fname) &&
