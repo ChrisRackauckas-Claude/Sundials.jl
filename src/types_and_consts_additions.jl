@@ -18,8 +18,10 @@ end
 # Indices are always `sunindextype` (== Int64) in the C library; Julia CSC
 # uses `Int` (== Int32 on 32-bit), so accept any Integer index type and wrap
 # SUN pointers as Vector{sunindextype} (not Vector{Int}).
-function Base.copyto!(Asun::SUNMatrix,
-        Acsc::SparseArrays.SparseMatrixCSC{Float64, Ti}) where {Ti <: Integer}
+function Base.copyto!(
+        Asun::SUNMatrix,
+        Acsc::SparseArrays.SparseMatrixCSC{Float64, Ti}
+    ) where {Ti <: Integer}
     _sunmat = unsafe_load(Asun)
     _mat = convert(SUNMatrixContent_Sparse, _sunmat.content)
     mat = unsafe_load(_mat)
