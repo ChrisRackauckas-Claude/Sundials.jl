@@ -14,14 +14,20 @@ function Base.convert(::Type{Matrix}, J::SUNMatrix)
     return unsafe_wrap(Array, mat.data, (mat.M, mat.N); own = false)
 end
 
-# sparse SUNMatrix uses zero-offset indices, so provide copyto!, not convert
-function Base.copyto!(Asun::SUNMatrix, Acsc::SparseArrays.SparseMatrixCSC{Float64, Int64})
+# sparse SUNMatrix uses zero-offset indices, so provide copyto!, not convert.
+# Indices are always `sunindextype` (== Int64) in the C library; Julia CSC
+# uses `Int` (== Int32 on 32-bit), so accept any Integer index type and wrap
+# SUN pointers as Vector{sunindextype} (not Vector{Int}).
+function Base.copyto!(
+        Asun::SUNMatrix,
+        Acsc::SparseArrays.SparseMatrixCSC{Float64, Ti}
+    ) where {Ti <: Integer}
     _sunmat = unsafe_load(Asun)
     _mat = convert(SUNMatrixContent_Sparse, _sunmat.content)
     mat = unsafe_load(_mat)
     # own is false as memory is allocated by sundials
-    indexvals = unsafe_wrap(Vector{Int}, mat.indexvals, (mat.NNZ); own = false)
-    indexptrs = unsafe_wrap(Vector{Int}, mat.indexptrs, (mat.NP + 1); own = false)
+    indexvals = unsafe_wrap(Vector{sunindextype}, mat.indexvals, (mat.NNZ); own = false)
+    indexptrs = unsafe_wrap(Vector{sunindextype}, mat.indexptrs, (mat.NP + 1); own = false)
     data = unsafe_wrap(Vector{Float64}, mat.data, (mat.NNZ); own = false)
 
     if size(indexvals) != size(Acsc.rowval) || size(indexptrs) != size(Acsc.colptr)
