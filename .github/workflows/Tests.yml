@@ -48,4 +48,6 @@ jobs:
       julia-version: ${{ matrix.version }}
       julia-arch: ${{ matrix.arch }}
       os: ${{ matrix.os }}
+      # Temporary until SciML/.github retags v1 with #136 develop_sources Pkg.add
+      dotgithub-ref: master
     secrets: inherit
