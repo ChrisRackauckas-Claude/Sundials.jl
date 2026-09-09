@@ -86,8 +86,12 @@ end
     @safetestset "Jacobians" begin
         include("common_interface/jacobians.jl")
     end
-    @safetestset "Callbacks" begin
-        include("common_interface/callbacks.jl")
+    # ContinuousCallback interp_points is Int on 32-bit; DiffEqBase range length
+    # must be Int64 (OrdinaryDiffEq#4487) or Base._linspace raises InexactError.
+    if Sys.WORD_SIZE == 64
+        @safetestset "Callbacks" begin
+            include("common_interface/callbacks.jl")
+        end
     end
     @safetestset "Iterator" begin
         include("common_interface/iterators.jl")

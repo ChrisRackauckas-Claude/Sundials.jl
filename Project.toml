@@ -75,5 +75,3 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 [targets]
 test = ["Test", "ADTypes", "AlgebraicMultigrid", "DiffEqCallbacks", "ODEProblemLibrary", "DAEProblemLibrary", "ForwardDiff", "DifferentiationInterface", "SparseConnectivityTracer", "IncompleteLU", "ImplicitDiscreteSolve", "ModelingToolkit", "SafeTestsets"]
 
-[sources]
-DiffEqBase = {url = "https://github.com/ChrisRackauckas-Claude/OrdinaryDiffEq.jl.git", rev = "fix-32bit-interp-points-range", subdir = "lib/DiffEqBase"}
