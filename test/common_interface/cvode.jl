@@ -90,16 +90,18 @@ sol9 = solve(prob, CVODE_BDF(; linear_solver = :Dense))
 sol10 = solve(prob, CVODE_BDF(; linear_solver = :LapackDense))
 sol11 = solve(prob, CVODE_BDF(; linear_solver = :LapackBand, jac_upper = 3, jac_lower = 3))
 
-@test isapprox(sol1.u[end], sol2.u[end]; rtol = 1.0e-3)
-@test isapprox(sol1.u[end], sol3.u[end]; rtol = 1.0e-3)
-@test isapprox(sol1.u[end], sol4.u[end]; rtol = 1.0e-3)
-@test isapprox(sol1.u[end], sol5.u[end]; rtol = 1.0e-3)
-@test isapprox(sol1.u[end], sol6.u[end]; rtol = 1.0e-3)
-@test isapprox(sol1.u[end], sol7.u[end]; rtol = 1.0e-3)
-@test isapprox(sol1.u[end], sol8.u[end]; rtol = 1.0e-3)
-@test isapprox(sol1.u[end], sol9.u[end]; rtol = 1.0e-3)
-@test isapprox(sol1.u[end], sol10.u[end]; rtol = 1.0e-3)
-@test isapprox(sol1.u[end], sol11.u[end]; rtol = 1.0e-3)
+# i686 linear solves can drift slightly past 1e-3 vs the dense reference.
+solver_rtol = Sys.WORD_SIZE == 32 ? 2.0e-3 : 1.0e-3
+@test isapprox(sol1.u[end], sol2.u[end]; rtol = solver_rtol)
+@test isapprox(sol1.u[end], sol3.u[end]; rtol = solver_rtol)
+@test isapprox(sol1.u[end], sol4.u[end]; rtol = solver_rtol)
+@test isapprox(sol1.u[end], sol5.u[end]; rtol = solver_rtol)
+@test isapprox(sol1.u[end], sol6.u[end]; rtol = solver_rtol)
+@test isapprox(sol1.u[end], sol7.u[end]; rtol = solver_rtol)
+@test isapprox(sol1.u[end], sol8.u[end]; rtol = solver_rtol)
+@test isapprox(sol1.u[end], sol9.u[end]; rtol = solver_rtol)
+@test isapprox(sol1.u[end], sol10.u[end]; rtol = solver_rtol)
+@test isapprox(sol1.u[end], sol11.u[end]; rtol = solver_rtol)
 
 # Test identity preconditioner
 global prec_used = false

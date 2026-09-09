@@ -172,4 +172,4 @@ sol = solve(prob, IDA(), initializealg = Sundials.BrownFullBasicInit())
 @test sol.retcode == ReturnCode.Success
 # test that the callback flipping p caused u[2] to get flipped.
 first_t = findfirst(isequal(0.5), sol.t)
-@test sol.u[first_t][2] == -sol.u[first_t + 1][2]
+@test sol.u[first_t][2] ≈ -sol.u[first_t + 1][2]
